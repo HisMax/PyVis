@@ -41,6 +41,10 @@
                             <i class="material-icons">compare_arrows</i>
                             波的叠加
                         </a>
+                        <a href="#" class="list-group-item list-group-item-action" data-experiment="diffraction">
+                            <i class="material-icons">blur_on</i>
+                            夫琅禾费矩形孔衍射
+                        </a>
                     </div>
                 </div>
             </div>
@@ -235,6 +239,50 @@
                             <span class="ms-3" style="color: #304ffe">— 叠加波</span>
                         </p>
                     </div>
+                </div>
+
+                <!-- 单缝衍射 -->
+                <div id="diffraction-experiment" class="experiment" style="display: none;">
+                    <h3>
+                        <i class="material-icons">blur_on</i>
+                        夫琅禾费矩形孔衍射模拟
+                    </h3>
+                    <div class="control-panel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5 class="mb-3">基本参数</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">光波长 (λ): <span id="wavelength-value">550</span> nm</label>
+                                    <input type="range" class="form-range" id="wavelength" min="380" max="780" step="1" value="550">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">矩形孔宽度 (a): <span id="rect-width-value">0.0028</span> m</label>
+                                    <input type="range" class="form-range" id="rect-width" min="0.0002" max="0.0055" step="0.00001" value="0.0028">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">矩形孔高度 (b): <span id="rect-height-value">0.0026</span> m</label>
+                                    <input type="range" class="form-range" id="rect-height" min="0.0002" max="0.0055" step="0.00001" value="0.0026">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">屏距 (L): <span id="screen-distance-value">1.6</span> m</label>
+                                    <input type="range" class="form-range" id="screen-distance" min="1.0" max="3.0" step="0.01" value="1.6">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-panel">
+                                    <h5>衍射参数</h5>
+                                    <p>网格点数: <span id="grid-points">500</span></p>
+                                    <p>中央明斑强度: <span id="central-intensity-value">1.00</span></p>
+                                    <p>第一级暗纹位置 (x): <span id="first-minimum-x-value">0.00</span> mm</p>
+                                    <p>第一级暗纹位置 (y): <span id="first-minimum-y-value">0.00</span> mm</p>
+                                    <div class="alert alert-info">
+                                        I(x,y) = I₀·sinc²(πax/λL)·sinc²(πby/λL)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="diffraction" class="plot-container" style="height: 500px;"></div>
                 </div>
             </div>
         </div>
@@ -691,6 +739,9 @@
                 case 'wave-superposition':
                     updateWaveSuperposition();
                     break;
+                case 'diffraction':
+                    updateDiffraction();
+                    break;
             }
         }
 
@@ -712,11 +763,12 @@
             $('.form-range').on('input', function() {
                 updateValues();
                 if (currentExperiment === 'lissajous') {
-                    // 每次参数变化都重新开始动画
                     currentLissajousTime = 0;
                     updateLissajous();
                 } else if (currentExperiment === 'wave-superposition') {
                     updateWaveSuperposition();
+                } else if (currentExperiment === 'diffraction') {
+                    updateDiffraction();
                 }
             });
 
@@ -854,6 +906,120 @@
                         title: 'y(t)'
                     };
             }
+        }
+
+        // 衍射图样更新
+        function updateDiffraction() {
+            const wavelength = parseFloat($('#wavelength').val());  // nm
+            const rectWidth = parseFloat($('#rect-width').val());   // m
+            const rectHeight = parseFloat($('#rect-height').val()); // m
+            const screenDistance = parseFloat($('#screen-distance').val()); // m
+
+            // 更新参数显示
+            $('#wavelength-value').text(wavelength);
+            $('#rect-width-value').text(rectWidth.toFixed(4));
+            $('#rect-height-value').text(rectHeight.toFixed(4));
+            $('#screen-distance-value').text(screenDistance.toFixed(1));
+
+            // 计算衍射参数
+            const lambda = wavelength * 1e-9;  // 转换为米
+            const L = screenDistance;          // 米
+
+            // 计算第一级暗纹位置
+            const firstMinimumX = (lambda * L / rectWidth) * 1000;  // 转换为毫米
+            const firstMinimumY = (lambda * L / rectHeight) * 1000; // 转换为毫米
+            $('#first-minimum-x-value').text(firstMinimumX.toFixed(2));
+            $('#first-minimum-y-value').text(firstMinimumY.toFixed(2));
+
+            $.get(`/api/diffraction?wavelength=${wavelength}&rect_width=${rectWidth}&rect_height=${rectHeight}&screen_distance=${screenDistance}`, function(data) {
+                const layout = {
+                    ...baseLayout,
+                    title: {
+                        text: '夫琅禾费矩形孔衍射光强分布',
+                        font: { size: 14 }
+                    },
+                    showlegend: false,
+                    xaxis: {
+                        ...baseLayout.xaxis,
+                        title: {
+                            text: '空间坐标x (mm)',
+                            font: {
+                                size: 10,
+                                family: 'SF Mono, Consolas, monospace'
+                            }
+                        },
+                        range: [-0.002, 0.002],  // 固定显示范围为±2mm
+                        showgrid: false,
+                        zeroline: true,
+                        zerolinecolor: 'rgba(255,255,255,0.2)',
+                        tickfont: { size: 9 },
+                        ticks: 'outside',
+                        ticklen: 3,
+                        tickwidth: 1,
+                        tickcolor: '#666',
+                        mirror: true,
+                        automargin: true
+                    },
+                    yaxis: {
+                        ...baseLayout.yaxis,
+                        title: {
+                            text: '空间坐标y (mm)',
+                            font: {
+                                size: 10,
+                                family: 'SF Mono, Consolas, monospace'
+                            }
+                        },
+                        range: [-0.002, 0.002],  // 固定显示范围为±2mm
+                        scaleanchor: 'x',
+                        scaleratio: 1,
+                        showgrid: false,
+                        zeroline: true,
+                        zerolinecolor: 'rgba(255,255,255,0.2)',
+                        tickfont: { size: 9 },
+                        ticks: 'outside',
+                        ticklen: 3,
+                        tickwidth: 1,
+                        tickcolor: '#666',
+                        mirror: true,
+                        automargin: true
+                    },
+                    plot_bgcolor: 'black',
+                    paper_bgcolor: 'white',
+                    margin: { l: 40, r: 10, t: 30, b: 40 },
+                    width: 700,
+                    height: 500,
+                    autosize: false
+                };
+
+                const heatmapTrace = {
+                    type: 'heatmap',
+                    x: data.x,
+                    y: data.y,
+                    z: data.intensity,
+                    colorscale: [
+                        [0, 'rgb(0,0,0)'],      // 黑色
+                        [0.015, 'rgb(30,0,0)'],  // 深红
+                        [0.03, 'rgb(90,0,0)'],   // 暗红
+                        [0.045, 'rgb(150,0,0)'], // 中红
+                        [0.06, 'rgb(200,0,0)'],  // 亮红
+                        [0.07, 'rgb(255,50,0)'], // 橙红
+                        [0.08, 'rgb(255,150,50)'], // 橙色
+                        [0.3, 'rgb(255,200,100)'], // 浅橙
+                        [0.6, 'rgb(255,230,180)'], // 暖白
+                        [1, 'rgb(255,255,255)']  // 纯白
+                    ],
+                    showscale: true,
+                    hoverongaps: false,
+                    hoverinfo: 'x+y+z',
+                    hovertemplate: 'x: %{x:.3f} mm<br>y: %{y:.3f} mm<br>相对光强: %{z:.3f}<extra></extra>'
+                };
+
+                Plotly.newPlot('diffraction', [heatmapTrace], layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    staticPlot: false  // 允许交互
+                });
+            });
         }
     </script>
 </body>
