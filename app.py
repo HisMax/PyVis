@@ -6,10 +6,29 @@ app = Flask(__name__, static_folder='static')
 
 @app.route('/')
 def index():
+    """渲染主页面。
+    
+    Returns:
+        str: 渲染后的HTML页面
+    """
     return render_template('index.html')
 
 @app.route('/api/lissajous')
 def get_lissajous_data():
+    """生成利萨如图形的数据。
+    
+    利萨如图形是由两个互相垂直的简谐振动合成的轨迹。
+    
+    Query Parameters:
+        freq_x (float): x方向的振动频率，默认为3
+        freq_y (float): y方向的振动频率，默认为2
+        phase (float): 相位差，默认为π/2
+    
+    Returns:
+        json: 包含以下字段的JSON响应：
+            - x (list): x坐标数据点列表
+            - y (list): y坐标数据点列表
+    """
     # 从请求参数获取频率和相位
     freq_x = float(request.args.get('freq_x', 3))
     freq_y = float(request.args.get('freq_y', 2))
@@ -29,6 +48,25 @@ def get_lissajous_data():
 
 @app.route('/api/standing_wave')
 def get_standing_wave_data():
+    """生成驻波数据。
+    
+    驻波是由两列传播方向相反、频率和波长相同的行波相遇而产生的波动。
+    
+    Query Parameters:
+        t (float): 时间点，默认为0
+        k (float): 波数，默认为2π
+        omega (float): 角频率，默认为2π
+        amplitude (float): 波的振幅，默认为1.0
+    
+    Returns:
+        json: 包含以下字段的JSON响应：
+            - x (list): 空间位置点列表
+            - y (list): 驻波振幅列表
+            - forward_wave (list): 前行波振幅列表
+            - backward_wave (list): 反射波振幅列表
+            - nodes (list): 波节位置列表
+            - antinodes (list): 波腹位置列表
+    """
     # 从请求参数获取时间
     t = float(request.args.get('t', 0))
     k = float(request.args.get('k', 2*np.pi))
@@ -59,6 +97,19 @@ def get_standing_wave_data():
 
 @app.route('/api/polarized_light')
 def get_polarized_light():
+    """生成偏振光数据。
+    
+    模拟光波在偏振片中的传播，计算电场分量在不同偏振角度和相位差下的变化。
+    
+    Query Parameters:
+        angle (float): 偏振片的旋转角度（度），默认为0
+        phase_diff (float): 两个电场分量之间的相位差，默认为0
+    
+    Returns:
+        json: 包含以下字段的JSON响应：
+            - x (list): 旋转后的x方向电场分量
+            - y (list): 旋转后的y方向电场分量
+    """
     angle = float(request.args.get('angle', 0))
     phase_diff = float(request.args.get('phase_diff', 0))
     
@@ -83,8 +134,24 @@ def get_polarized_light():
 def diffraction():
     """计算矩形孔的夫琅禾费衍射图样。
     
-    使用夫琅禾费衍射公式计算矩形孔的衍射光强分布。
+    使用夫琅禾费衍射公式计算矩形孔的衍射光强分布：
     I(θx,θy) = I₀·sinc²(πa·sinθx/λ)·sinc²(πb·sinθy/λ)
+    
+    Query Parameters:
+        wavelength (float): 入射光波长，单位nm，默认550nm
+        rect_width (float): 矩形孔宽度，单位m，默认0.0028m
+        rect_height (float): 矩形孔高度，单位m，默认0.0026m
+        screen_distance (float): 屏幕距离，单位m，默认1.6m
+    
+    Returns:
+        json: 包含以下字段的JSON响应：
+            - x (list): x方向坐标点列表（mm）
+            - y (list): y方向坐标点列表（mm）
+            - intensity (list): 归一化后的光强分布数据
+            - x_range (float): x方向显示范围（mm）
+            - y_range (float): y方向显示范围（mm）
+            - first_min_x (float): x方向第一暗纹位置（mm）
+            - first_min_y (float): y方向第一暗纹位置（mm）
     """
     # 获取参数
     wavelength = float(request.args.get('wavelength', 550))  # nm
@@ -142,6 +209,24 @@ def diffraction():
 
 @app.route('/api/wave_superposition')
 def get_wave_superposition():
+    """生成波叠加数据。
+    
+    计算两个正弦波叠加后的合成波形。
+    
+    Query Parameters:
+        amp1 (float): 第一个波的振幅，默认为1
+        freq1 (float): 第一个波的频率，默认为1
+        amp2 (float): 第二个波的振幅，默认为1
+        freq2 (float): 第二个波的频率，默认为2
+        phase (float): 第二个波相对于第一个波的相位差，默认为0
+    
+    Returns:
+        json: 包含以下字段的JSON响应：
+            - x (list): 空间位置点列表
+            - wave1 (list): 第一个波的振幅列表
+            - wave2 (list): 第二个波的振幅列表
+            - superposition (list): 叠加波的振幅列表
+    """
     amp1 = float(request.args.get('amp1', 1))
     freq1 = float(request.args.get('freq1', 1))
     amp2 = float(request.args.get('amp2', 1))

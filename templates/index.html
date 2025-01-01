@@ -10,6 +10,8 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="{{ url_for('static', filename='js/exp/lissajous.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/exp/standing_wave.js') }}"></script>
 </head>
 <body>
     <nav class="navbar navbar-dark mb-4">
@@ -288,22 +290,21 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { updateLissajous, updateProjection, initLissajousEvents } from "{{ url_for('static', filename='js/exp/lissajous.js') }}";
+        import { updateStandingWave, initStandingWaveEvents, stopAnimation, state as standingWaveState } from "{{ url_for('static', filename='js/exp/standing_wave.js') }}";
+
         const CONFIG = {
             frameRate: 60,
             timeStep: 0.02
         };
 
         let currentExperiment = 'lissajous';
-        let isPlaying = true;
-        let currentTime = 0;
         let animationId = null;
-        let lissajousAnimationId = null;
-        let currentLissajousTime = 0;
-        let currentView = 'xy';
 
-        // 通用图表配置
-        const baseLayout = {
+        // 导出全局配置供模块使用
+        window.CONFIG = CONFIG;
+        window.baseLayout = {
             showlegend: false,
             margin: { l: 50, r: 30, t: 50, b: 50 },
             plot_bgcolor: '#fff',
@@ -356,263 +357,8 @@
             $('#period-value').text(period.toFixed(2));
             $('#energy-value').text(energy.toFixed(2));
         }
-
-        // 利萨如图形更新
-        function updateLissajous() {
-            const freqX = parseFloat($('#freq-x').val());
-            const freqY = parseFloat($('#freq-y').val());
-            const phase = parseFloat($('#phase').val()) * Math.PI / 180;
-            const showAnimation = $('#show-animation').prop('checked');
-
-            // 更新频率比和周期信息
-            const gcd = calculateGCD(freqX * 10, freqY * 10) / 10;
-            const ratioX = (freqX / gcd).toFixed(1);
-            const ratioY = (freqY / gcd).toFixed(1);
-            $('#freq-ratio').text(`${ratioY}:${ratioX}`);
-            $('#period').text(`${ratioX}π`);
-
-            // 停止现有的动画
-            if (lissajousAnimationId) {
-                cancelAnimationFrame(lissajousAnimationId);
-            }
-
-            // 重置时间
-            currentLissajousTime = 0;
-
-            const layout = {
-                ...baseLayout,
-                title: {
-                    text: '利萨如图形',
-                    font: { size: 24 }
-                },
-                xaxis: {
-                    ...baseLayout.xaxis,
-                    range: [-1.5, 1.5],
-                    title: 'x = A·sin(2πfx·t + φ)'
-                },
-                yaxis: {
-                    ...baseLayout.yaxis,
-                    range: [-1.5, 1.5],
-                    title: 'y = A·sin(2πfy·t)',
-                    scaleanchor: 'x',
-                    scaleratio: 1
-                }
-            };
-
-            if (showAnimation) {
-                // 计算一个完整周期所需的时间
-                const periodTime = (freqX / gcd) / freqX * 2 * Math.PI;
-                let isDrawing = true;
-                let lastPauseTime = 0;
-
-                function animate(timestamp) {
-                    if (isDrawing) {
-                        // 生成点
-                        const points = 500;  // 增加点数使曲线更平滑
-                        const t = Array.from({length: points}, (_, i) => 
-                            (i * currentLissajousTime) / (points - 1)
-                        );
-                        const x = t.map(t => Math.sin(2 * Math.PI * freqX * t + phase));
-                        const y = t.map(t => Math.sin(2 * Math.PI * freqY * t));
-
-                        Plotly.newPlot('lissajous', [{
-                            x: x,
-                            y: y,
-                            mode: 'lines',
-                            line: {
-                                color: '#1976d2',
-                                width: 2
-                            }
-                        }], layout, {responsive: true});
-
-                        currentLissajousTime += 0.02;
-                        $('#current-time').text(currentLissajousTime.toFixed(2));
-
-                        // 检查是否完成一个周期
-                        if (currentLissajousTime >= periodTime) {
-                            isDrawing = false;
-                            lastPauseTime = timestamp;
-                        }
-                    } else {
-                        // 暂停0.6秒后重新开始
-                        if (timestamp - lastPauseTime >= 600) {
-                            currentLissajousTime = 0;
-                            isDrawing = true;
-                        }
-                    }
-
-                    lissajousAnimationId = requestAnimationFrame(animate);
-                }
-
-                // 开始动画前先清空图形
-                Plotly.newPlot('lissajous', [{
-                    x: [],
-                    y: [],
-                    mode: 'lines',
-                    line: {
-                        color: '#1976d2',
-                        width: 2
-                    }
-                }], layout, {responsive: true});
-
-                animate(performance.now());
-            } else {
-                // 静态模式 - 绘制完整的利萨如图形
-                const points = 1000;  // 使用更多的点以获得更平滑的曲线
-                const t = Array.from({length: points}, (_, i) => (2 * Math.PI * i) / (points - 1));
-                const x = t.map(t => Math.sin(freqX * t + phase));
-                const y = t.map(t => Math.sin(freqY * t));
-
-                Plotly.newPlot('lissajous', [{
-                    x: x,
-                    y: y,
-                    mode: 'lines',
-                    line: {
-                        color: '#1976d2',
-                        width: 2
-                    }
-                }], layout, {responsive: true});
-            }
-        }
-
-        // 添加辅助函数计算最大公约数
-        function calculateGCD(a, b) {
-            a = Math.abs(a);
-            b = Math.abs(b);
-            while (b) {
-                let t = b;
-                b = a % b;
-                a = t;
-            }
-            return a;
-        }
-
-        // 驻波更新
-        function updateStandingWave() {
-            if (!isPlaying || currentExperiment !== 'standing-wave') return;
-
-            const speed = parseFloat($('#wave-speed').val());
-            const wavelength = parseFloat($('#wavelength').val());
-            const amplitude = parseFloat($('#amplitude').val());
-            
-            const k = 2 * Math.PI / wavelength;
-            const omega = k * speed;
-            currentTime += CONFIG.timeStep * speed;
-
-            $.get(`/api/standing_wave?t=${currentTime}&k=${k}&omega=${omega}&amplitude=${amplitude}`, function(data) {
-                const traces = [];
-                
-                // 添加行波分量（如果选中显示）
-                if ($('#show-components').prop('checked')) {
-                    traces.push({
-                        x: data.x,
-                        y: data.forward_wave,
-                        name: '前行波',
-                        mode: 'lines',
-                        line: { color: '#2196f3', width: 1.5, dash: 'dot' }
-                    });
-                    traces.push({
-                        x: data.x,
-                        y: data.backward_wave,
-                        name: '反射波',
-                        mode: 'lines',
-                        line: { color: '#ff9800', width: 1.5, dash: 'dot' }
-                    });
-                }
-
-                // 添加驻波
-                traces.push({
-                    x: data.x,
-                    y: data.y,
-                    name: '驻波',
-                    mode: 'lines',
-                    line: { color: '#1976d2', width: 3 }
-                });
-
-                // 添加波节点和波腹点
-                traces.push({
-                    x: data.nodes,
-                    y: Array(data.nodes.length).fill(0),
-                    mode: 'markers',
-                    marker: {
-                        color: '#f44336',
-                        size: 10,
-                        symbol: 'circle'
-                    },
-                    name: '波节点',
-                    showlegend: false
-                });
-
-                traces.push({
-                    x: data.antinodes,
-                    y: Array(data.antinodes.length).fill(0),
-                    mode: 'markers',
-                    marker: {
-                        color: '#4caf50',
-                        size: 10,
-                        symbol: 'circle'
-                    },
-                    name: '波腹点',
-                    showlegend: false
-                });
-
-                const layout = {
-                    ...baseLayout,
-                    title: {
-                        text: '驻波',
-                        font: { size: 24 }
-                    },
-                    showlegend: $('#show-components').prop('checked'),
-                    legend: {
-                        x: 1,
-                        xanchor: 'right',
-                        y: 1
-                    },
-                    xaxis: {
-                        ...baseLayout.xaxis,
-                        range: [0, 1],
-                        title: {
-                            text: '位置 (x/L)',
-                            font: {
-                                size: 12,
-                                family: 'SF Mono, Consolas, monospace'
-                            }
-                        }
-                    },
-                    yaxis: {
-                        ...baseLayout.yaxis,
-                        range: [-2.5, 2.5],
-                        title: {
-                            text: '振幅 (A)',
-                            font: {
-                                size: 12,
-                                family: 'SF Mono, Consolas, monospace'
-                            }
-                        }
-                    }
-                };
-
-                Plotly.newPlot('standing-wave', traces, layout, {
-                    responsive: true,
-                    displayModeBar: true,
-                    modeBarButtonsToAdd: ['drawline', 'eraseshape'],
-                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
-                });
-
-                // 更新波节点数显示
-                $('#node-count').text(data.nodes.length - 1);
-                $('#antinode-count').text(data.antinodes.length);
-                
-                animationId = setTimeout(() => {
-                    requestAnimationFrame(updateStandingWave);
-                }, 1000 / CONFIG.frameRate);
-            });
-        }
-
-        // 添加行波显示切换事件
-        $('#show-components').change(function() {
-            $('#wave-components').toggle(this.checked);
-        });
+        // 导出updateValues函数供模块使用
+        window.updateValues = updateValues;
 
         // 波的叠加更新
         function updateWaveSuperposition() {
@@ -708,11 +454,6 @@
             });
         }
 
-        // 添加波形显示切换事件监听
-        $('#show-wave1, #show-wave2').on('change', function() {
-            updateWaveSuperposition();
-        });
-
         // 切换实验
         function switchExperiment(experimentId) {
             $('.experiment').hide();
@@ -720,9 +461,9 @@
             $('.list-group-item').removeClass('active');
             $(`[data-experiment="${experimentId}"]`).addClass('active');
             
-            if (animationId) {
-                clearTimeout(animationId);
-                animationId = null;
+            // 停止当前实验的动画
+            if (currentExperiment === 'standing-wave') {
+                stopAnimation();
             }
             
             currentExperiment = experimentId;
@@ -732,8 +473,8 @@
                     updateLissajous();
                     break;
                 case 'standing-wave':
-                    if (isPlaying) {
-                        updateStandingWave();
+                    if (standingWaveState.isPlaying) {
+                        updateStandingWave(CONFIG);
                     }
                     break;
                 case 'wave-superposition':
@@ -750,6 +491,10 @@
             // 初始化参数显示
             updateValues();
             
+            // 初始化各实验的事件
+            initLissajousEvents();
+            initStandingWaveEvents();
+            
             // 初始化第一个实验
             updateLissajous();
 
@@ -762,31 +507,10 @@
             // 参数更新
             $('.form-range').on('input', function() {
                 updateValues();
-                if (currentExperiment === 'lissajous') {
-                    currentLissajousTime = 0;
-                    updateLissajous();
-                } else if (currentExperiment === 'wave-superposition') {
+                if (currentExperiment === 'wave-superposition') {
                     updateWaveSuperposition();
                 } else if (currentExperiment === 'diffraction') {
                     updateDiffraction();
-                }
-            });
-
-            // 驻波控制
-            $('#play-pause').click(function() {
-                isPlaying = !isPlaying;
-                $(this).text(isPlaying ? '暂停' : '播放');
-                if (isPlaying && currentExperiment === 'standing-wave') {
-                    updateStandingWave();
-                }
-            });
-
-            $('#reset').click(function() {
-                currentTime = 0;
-                $('#wave-speed').val(1);
-                updateValues();
-                if (currentExperiment === 'standing-wave' && isPlaying) {
-                    updateStandingWave();
                 }
             });
 
@@ -801,112 +525,7 @@
                     }
                 }, 250);
             });
-
-            // 添加事件监听
-            $('#show-animation').change(function() {
-                if (!this.checked && lissajousAnimationId) {
-                    cancelAnimationFrame(lissajousAnimationId);
-                    currentLissajousTime = 0;
-                }
-                updateLissajous();
-            });
-
-            // 移除视图切换相关的事件监听
-            $('#view-xy, #view-xt, #view-yt').off('click');
         });
-
-        // 添加投影图更新函数
-        function updateProjection(x, y, t) {
-            const traces = [
-                {
-                    x: [0, x],
-                    y: [y, y],
-                    mode: 'lines',
-                    line: { color: '#1976d2', width: 1, dash: 'dot' }
-                },
-                {
-                    x: [x, x],
-                    y: [0, y],
-                    mode: 'lines',
-                    line: { color: '#1976d2', width: 1, dash: 'dot' }
-                },
-                {
-                    x: [x],
-                    y: [y],
-                    mode: 'markers',
-                    marker: {
-                        color: '#f44336',
-                        size: 8
-                    }
-                }
-            ];
-
-            const layout = {
-                ...baseLayout,
-                title: {
-                    text: '投影视图',
-                    font: { size: 20 }
-                },
-                xaxis: {
-                    range: [-1.5, 1.5],
-                    title: 'x'
-                },
-                yaxis: {
-                    range: [-1.5, 1.5],
-                    title: 'y',
-                    scaleanchor: 'x',
-                    scaleratio: 1
-                }
-            };
-
-            Plotly.newPlot('lissajous-projection', traces, layout, {responsive: true});
-        }
-
-        // 添加视图配置函数
-        function getViewTitle() {
-            switch(currentView) {
-                case 'xy': return '利萨如图形 (XY平面)';
-                case 'xt': return 'X分量时间图';
-                case 'yt': return 'Y分量时间图';
-            }
-        }
-
-        function getXAxisConfig() {
-            switch(currentView) {
-                case 'xy':
-                    return {
-                        range: [-1.5, 1.5],
-                        title: 'x = A·sin(2πfx·t + φ)'
-                    };
-                case 'xt':
-                case 'yt':
-                    return {
-                        title: '时间 (t)'
-                    };
-            }
-        }
-
-        function getYAxisConfig() {
-            switch(currentView) {
-                case 'xy':
-                    return {
-                        range: [-1.5, 1.5],
-                        title: 'y = A·sin(2πfy·t)',
-                        scaleanchor: 'x',
-                        scaleratio: 1
-                    };
-                case 'xt':
-                    return {
-                        range: [-1.5, 1.5],
-                        title: 'x(t)'
-                    };
-                case 'yt':
-                    return {
-                        range: [-1.5, 1.5],
-                        title: 'y(t)'
-                    };
-            }
-        }
 
         // 衍射图样更新
         function updateDiffraction() {
